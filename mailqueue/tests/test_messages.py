@@ -3,7 +3,7 @@ import os.path
 
 from django.core import mail
 from django.core.files import File
-from django.test import TestCase
+from django.test import TransactionTestCase
 from django.conf import settings
 
 from ..models import MailerMessage
@@ -11,7 +11,7 @@ from .utils import create_email
 from .factories import MailFactory
 
 
-class MailQueueTestCase(TestCase):
+class MailQueueTestCase(TransactionTestCase):
     def setUp(self):
         self.TEST_ROOT = os.path.abspath(os.path.dirname(__file__))
 

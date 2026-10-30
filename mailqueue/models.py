@@ -6,7 +6,7 @@ import os
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMultiAlternatives
-from django.db import models
+from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
@@ -61,6 +61,7 @@ class MailerMessage(models.Model):
     def __str__(self):
         return self.subject
 
+    @transaction.atomic
     def add_attachment(self, attachment):
         """
         Takes a Django `File` object and creates an attachment for this mailer message.
@@ -79,7 +80,8 @@ class MailerMessage(models.Model):
             new_attachment.save()
         except Exception as e:
             logger.error(e)
-            new_attachment.file_attachment.delete()
+            new_attachment.file_attachment.delete(save=False)
+            raise
 
     def _save_without_sending(self, *args, **kwargs):
         """
@@ -121,24 +123,22 @@ class MailerMessage(models.Model):
             msg.cc = [email.strip() for email in self.cc_address.split(',') if email.strip()]
             msg.bcc = [email.strip() for email in self.bcc_address.split(',') if email.strip()]
 
-            # Add any additional attachments
-            for attachment in self.attachment_set.all():
-                path = attachment.file_attachment.path
-                if os.path.isfile(path):
-                    with open(path, 'rb') as f:
-                        content = f.read()
-                    msg.attach(attachment.original_filename, content, None)
             try:
+                for attachment in self.attachment_set.all():
+                    with attachment.file_attachment.open('rb') as file:
+                        content = file.read()
+                    msg.attach(attachment.original_filename, content, None)
                 msg.send()
                 self.sent = True
             except Exception as e:
                 self.do_not_send = True
                 logger.exception('Mail Queue Exception: {0}'.format(e))
+            self.do_not_send = True
             self.save()
 
 
 class Attachment(models.Model):
-    file_attachment = models.FileField(storage=get_storage(), upload_to=upload_to,
+    file_attachment = models.FileField(storage=get_storage, upload_to=upload_to,
                                        blank=True, null=True)
     original_filename = models.CharField(default=None, max_length=250, blank=False)
     email = models.ForeignKey(MailerMessage, on_delete=models.CASCADE, blank=True, null=True)

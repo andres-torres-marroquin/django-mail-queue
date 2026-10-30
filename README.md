@@ -195,3 +195,15 @@ pip install -r requirements.txt
 
 py.test mailqueue
 ```
+
+### Shared attachment storage
+
+Set `MAILQUEUE_STORAGE=False` to use Django's default storage, including an S3
+backend configured by the host application. `True` preserves local storage with
+`MAILQUEUE_ROOT` or `MEDIA_ROOT`. Keep existing attachment keys when migrating.
+Reading, replacement and deletion use the storage API, not filesystem paths.
+Unreadable attachments prevent delivery and leave the message pending for retry.
+Automatic sending runs after transaction commit. Callers that create a message
+and attachment separately should wrap the complete operation in one transaction.
+Deploy storage-compatible readers everywhere and migrate existing files before
+switching storage; old filesystem-only workers cannot read remote attachments.
