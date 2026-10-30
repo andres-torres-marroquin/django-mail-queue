@@ -3,7 +3,7 @@ import factory
 from mailqueue.models import MailerMessage
 
 
-class MailFactory(factory.DjangoModelFactory):
+class MailFactory(factory.django.DjangoModelFactory):
     subject = "Test email"
     to_address = "foo@mail.co.uk"
     from_address = "noreply@mail.co.uk"

@@ -1,6 +1,6 @@
 import os
 from django.conf import settings
-from django.core.files.storage import FileSystemStorage
+from django.core.files.storage import FileSystemStorage, default_storage
 from django.utils.crypto import get_random_string
 
 MAILQUEUE_ATTACHMENT_DIR = getattr(settings, 'MAILQUEUE_ATTACHMENT_DIR', 'mailqueue-attachments')
@@ -17,7 +17,7 @@ class MailerStorage(FileSystemStorage):
 
 
 def get_storage():
-    fs = None
+    fs = default_storage
     if getattr(settings, 'MAILQUEUE_STORAGE', False):
         fs = MailerStorage() if hasattr(settings, 'MAILQUEUE_ROOT') \
             else FileSystemStorage(location=settings.MEDIA_ROOT)
