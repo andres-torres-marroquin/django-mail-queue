@@ -102,7 +102,7 @@ class MailerMessage(models.Model):
         else:
             self._send()
 
-    def _send(self):
+    def _send(self, raise_errors=False):
         if not self.sent:
             self.last_attempt = timezone.now()
 
@@ -131,10 +131,12 @@ class MailerMessage(models.Model):
                 msg.send()
                 self.sent = True
             except Exception as e:
+                logger.exception('Mail Queue Exception for message %s: %s', self.pk, e)
+                if raise_errors:
+                    raise
+            finally:
                 self.do_not_send = True
-                logger.exception('Mail Queue Exception: {0}'.format(e))
-            self.do_not_send = True
-            self.save()
+                self.save()
 
 
 class Attachment(models.Model):

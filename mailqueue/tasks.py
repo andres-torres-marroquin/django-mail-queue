@@ -5,8 +5,8 @@ from celery import shared_task
 from .models import MailerMessage
 
 
-@shared_task(name="tasks.send_mail", default_retry_delay=5, max_retries=5)
-def send_mail(pk):
+@shared_task(bind=True, name="tasks.send_mail", default_retry_delay=5, max_retries=5)
+def send_mail(self, pk):
     """
     Send a single mailqueue message.
     """
@@ -16,11 +16,11 @@ def send_mail(pk):
         # We didn't find the message, nothing to do.
         return
 
-    message._send()
+    try:
+        message._send(raise_errors=True)
+    except Exception as exc:
+        raise self.retry(args=[message.pk], exc=exc)
 
-    # Retry when message is not sent
-    if not message.sent:
-        send_mail.retry([message.pk])
 
 
 @shared_task()

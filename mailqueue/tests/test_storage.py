@@ -111,3 +111,40 @@ class StorageTests(TransactionTestCase):
                 raise RuntimeError('rollback')
         self.assertEqual(len(mail.outbox), 0)
         self.assertFalse(MailerMessage.objects.filter(subject='Rolled back').exists())
+
+
+    def test_raising_mode_preserves_error_and_attempt(self):
+        self.attach()
+        with patch.object(self.storage, 'open', side_effect=PermissionError('S3 access denied')):
+            with self.assertRaisesMessage(PermissionError, 'S3 access denied'):
+                self.message._send(raise_errors=True)
+        self.message.refresh_from_db()
+        self.assertFalse(self.message.sent)
+        self.assertIsNotNone(self.message.last_attempt)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_celery_retry_carries_original_exception(self):
+        from celery.exceptions import Retry
+        from mailqueue.tasks import send_mail
+
+        self.attach()
+        error = PermissionError('S3 access denied')
+        with patch.object(self.storage, 'open', side_effect=error), patch.object(
+            send_mail, 'retry', side_effect=Retry()
+        ) as retry:
+            with self.assertRaises(Retry):
+                send_mail.run(self.message.pk)
+        self.assertIs(retry.call_args.kwargs['exc'], error)
+        self.assertEqual(retry.call_args.kwargs['args'], [self.message.pk])
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_retry_exhaustion_reports_original_exception(self):
+        from mailqueue.tasks import send_mail
+
+        self.attach()
+        with patch.object(self.storage, 'open', side_effect=PermissionError('S3 access denied')):
+            with self.assertRaisesMessage(PermissionError, 'S3 access denied'):
+                send_mail.apply(args=[self.message.pk], retries=send_mail.max_retries, throw=True)
+        self.message.refresh_from_db()
+        self.assertFalse(self.message.sent)
+        self.assertEqual(len(mail.outbox), 0)
